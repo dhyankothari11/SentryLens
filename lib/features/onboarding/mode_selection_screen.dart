@@ -62,17 +62,12 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen>
                 // Header
                 Row(
                   children: [
-                    Container(
+                    SizedBox(
                       width: 40,
                       height: 40,
-                      decoration: BoxDecoration(
-                        gradient: AppColors.accentGradient,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.visibility_rounded,
-                        color: Colors.white,
-                        size: 20,
+                      child: Image.asset(
+                        'assets/images/logo_without_bg.png',
+                        fit: BoxFit.contain,
                       ),
                     ),
                     const SizedBox(width: 12),

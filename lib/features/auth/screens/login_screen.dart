@@ -89,24 +89,13 @@ class _LoginScreenState extends State<LoginScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(
-            gradient: AppColors.accentGradient,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.accent.withValues(alpha: 0.4),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.visibility_rounded,
-            color: Colors.white,
-            size: 28,
+        // Real logo (no background, sits on the dark page)
+        SizedBox(
+          width: 64,
+          height: 64,
+          child: Image.asset(
+            'assets/images/logo_without_bg.png',
+            fit: BoxFit.contain,
           ),
         ),
         const SizedBox(height: 20),
