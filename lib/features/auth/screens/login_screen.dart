@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/services/auth_service.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
+class _LoginScreenState extends ConsumerState<LoginScreen>
     with TickerProviderStateMixin {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -183,7 +185,7 @@ class _LoginScreenState extends State<LoginScreen>
                 ),
               ),
               validator: (v) =>
-                  v == null || v.length < 6 ? 'Min 6 characters' : null,
+                  v == null || v.length < 8 ? 'Min 8 characters' : null,
             ),
             const SizedBox(height: 12),
             Align(
@@ -271,10 +273,29 @@ class _LoginScreenState extends State<LoginScreen>
   void _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(seconds: 1)); // TODO: Firebase auth
-    if (mounted) {
-      setState(() => _isLoading = false);
-      context.goNamed('mode-select');
+
+    try {
+      final auth = ref.read(authServiceProvider);
+      await auth.signInWithEmail(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
+      if (mounted) {
+        context.goNamed('mode-select');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: AppColors.accent,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

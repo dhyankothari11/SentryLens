@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "971982451447",
+    "project_id": "sentrylens",
+    "storage_bucket": "sentrylens.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:971982451447:android:444858eae2507f7034d9f2",
+        "android_client_info": {
+          "package_name": "com.example.sentry_lens"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDPHuCD-5BL7pCXyK2aQoeq79d_Nfo0aY0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -16,7 +16,6 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen>
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
   late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
 
   @override
   void initState() {
@@ -33,9 +32,6 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen>
       duration: const Duration(seconds: 2),
       vsync: this,
     )..repeat(reverse: true);
-    _pulseAnimation = Tween<double>(begin: 0.95, end: 1.05).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
     _fadeController.forward();
   }
 

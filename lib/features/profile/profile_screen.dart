@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/services/auth_service.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: AppColors.bgPrimary,
       appBar: AppBar(
@@ -87,7 +89,8 @@ class ProfileScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'user@example.com',
+                  ref.watch(authStateProvider).valueOrNull?.email ??
+                      'Loading...',
                   style: AppTheme.dark.textTheme.bodySmall,
                 ),
                 const SizedBox(height: 12),
@@ -253,9 +256,18 @@ class ProfileScreen extends StatelessWidget {
                       ),
                     ),
                     ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        context.goNamed('login');
+                      onPressed: () async {
+                        Navigator.pop(context); // close dialog
+                        try {
+                          await ref.read(authServiceProvider).signOut();
+                          // The go_router redirect will automatically handle sending the user to /login
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(e.toString())),
+                            );
+                          }
+                        }
                       },
                       child: const Text('Sign Out'),
                     ),

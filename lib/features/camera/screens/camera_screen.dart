@@ -160,7 +160,7 @@ class _CameraScreenState extends State<CameraScreen>
         children: [
           // Back
           GestureDetector(
-            onTap: () => context.pop(),
+            onTap: () => context.goNamed('mode-select'),
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(

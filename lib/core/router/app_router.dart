@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
@@ -11,6 +12,7 @@ import '../../features/devices/device_management_screen.dart';
 import '../../features/settings/settings_screen.dart';
 import '../../features/profile/profile_screen.dart';
 import '../theme/app_colors.dart';
+import '../services/auth_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -105,67 +107,86 @@ class _SplashScreenState extends State<SplashScreen>
   }
 }
 
-final GoRouter appRouter = GoRouter(
-  initialLocation: '/splash',
-  routes: [
-    GoRoute(
-      path: '/splash',
-      name: 'splash',
-      builder: (_, __) => const SplashScreen(),
-    ),
-    GoRoute(
-      path: '/login',
-      name: 'login',
-      builder: (_, __) => const LoginScreen(),
-    ),
-    GoRoute(
-      path: '/register',
-      name: 'register',
-      builder: (_, __) => const RegisterScreen(),
-    ),
-    GoRoute(
-      path: '/mode-select',
-      name: 'mode-select',
-      builder: (_, __) => const ModeSelectionScreen(),
-    ),
-    GoRoute(
-      path: '/camera',
-      name: 'camera',
-      builder: (_, __) => const CameraScreen(),
-    ),
-    GoRoute(
-      path: '/viewer',
-      name: 'viewer',
-      builder: (_, __) => const ViewerDashboardScreen(),
-      routes: [
-        GoRoute(
-          path: 'live/:deviceId',
-          name: 'live-stream',
-          builder: (_, state) => LiveStreamScreen(
-            deviceId: state.pathParameters['deviceId'] ?? '',
+final appRouterProvider = Provider<GoRouter>((ref) {
+  final authState = ref.watch(authStateProvider);
+
+  return GoRouter(
+    initialLocation: '/splash',
+    redirect: (context, state) {
+      final isLoggedIn = authState.valueOrNull != null;
+      final isSplash = state.matchedLocation == '/splash';
+      final isLoggingIn =
+          state.matchedLocation == '/login' ||
+          state.matchedLocation == '/register';
+
+      // Let the splash screen play out (it routes to /login on its own)
+      if (isSplash) return null;
+
+      if (!isLoggedIn && !isLoggingIn) return '/login';
+      if (isLoggedIn && isLoggingIn) return '/mode-select';
+
+      return null;
+    },
+    routes: [
+      GoRoute(
+        path: '/splash',
+        name: 'splash',
+        builder: (_, __) => const SplashScreen(),
+      ),
+      GoRoute(
+        path: '/login',
+        name: 'login',
+        builder: (_, __) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/register',
+        name: 'register',
+        builder: (_, __) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/mode-select',
+        name: 'mode-select',
+        builder: (_, __) => const ModeSelectionScreen(),
+      ),
+      GoRoute(
+        path: '/camera',
+        name: 'camera',
+        builder: (_, __) => const CameraScreen(),
+      ),
+      GoRoute(
+        path: '/viewer',
+        name: 'viewer',
+        builder: (_, __) => const ViewerDashboardScreen(),
+        routes: [
+          GoRoute(
+            path: 'live/:deviceId',
+            name: 'live-stream',
+            builder: (_, state) => LiveStreamScreen(
+              deviceId: state.pathParameters['deviceId'] ?? '',
+            ),
           ),
-        ),
-        GoRoute(
-          path: 'events',
-          name: 'events',
-          builder: (_, __) => const EventTimelineScreen(),
-        ),
-        GoRoute(
-          path: 'devices',
-          name: 'devices',
-          builder: (_, __) => const DeviceManagementScreen(),
-        ),
-      ],
-    ),
-    GoRoute(
-      path: '/settings',
-      name: 'settings',
-      builder: (_, __) => const SettingsScreen(),
-    ),
-    GoRoute(
-      path: '/profile',
-      name: 'profile',
-      builder: (_, __) => const ProfileScreen(),
-    ),
-  ],
-);
+          GoRoute(
+            path: 'events',
+            name: 'events',
+            builder: (_, __) => const EventTimelineScreen(),
+          ),
+          GoRoute(
+            path: 'devices',
+            name: 'devices',
+            builder: (_, __) => const DeviceManagementScreen(),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/settings',
+        name: 'settings',
+        builder: (_, __) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/profile',
+        name: 'profile',
+        builder: (_, __) => const ProfileScreen(),
+      ),
+    ],
+  );
+});

@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/services/auth_service.dart';
 
-class RegisterScreen extends StatefulWidget {
+class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 
   @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
+  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen>
+class _RegisterScreenState extends ConsumerState<RegisterScreen>
     with SingleTickerProviderStateMixin {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -141,8 +143,8 @@ class _RegisterScreenState extends State<RegisterScreen>
                             ),
                           ),
                         ),
-                        validator: (v) => v == null || v.length < 6
-                            ? 'Min 6 characters'
+                        validator: (v) => v == null || v.length < 8
+                            ? 'Min 8 characters'
                             : null,
                       ),
                       const SizedBox(height: 28),
@@ -198,10 +200,35 @@ class _RegisterScreenState extends State<RegisterScreen>
   void _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(seconds: 1)); // TODO: Firebase auth
-    if (mounted) {
-      setState(() => _isLoading = false);
-      context.goNamed('mode-select');
+
+    try {
+      final auth = ref.read(authServiceProvider);
+      final cred = await auth.registerWithEmail(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
+
+      // Update the display name
+      if (cred != null && cred.user != null) {
+        await cred.user!.updateDisplayName(_nameController.text.trim());
+      }
+
+      if (mounted) {
+        context.goNamed('mode-select');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: AppColors.accent,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 }

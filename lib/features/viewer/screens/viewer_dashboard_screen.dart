@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/services/auth_service.dart';
 
 class ViewerDashboardScreen extends StatefulWidget {
   const ViewerDashboardScreen({super.key});
@@ -147,7 +149,18 @@ class _ViewerDashboardScreenState extends State<ViewerDashboardScreen>
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('SentryLens', style: AppTheme.dark.textTheme.headlineMedium),
+              Consumer(
+                builder: (context, ref, child) {
+                  final user = ref.watch(authStateProvider).valueOrNull;
+                  final displayName = user?.displayName ?? 'SentryLens User';
+                  return Text(
+                    displayName,
+                    style: AppTheme.dark.textTheme.headlineMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  );
+                },
+              ),
               Text(
                 '${_devices.where((d) => d.isOnline).length} of ${_devices.length} cameras online',
                 style: AppTheme.dark.textTheme.bodySmall,
@@ -248,7 +261,7 @@ class _ViewerDashboardScreenState extends State<ViewerDashboardScreen>
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 160,
+          height: 164, // Increased to prevent bottom overflow
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
