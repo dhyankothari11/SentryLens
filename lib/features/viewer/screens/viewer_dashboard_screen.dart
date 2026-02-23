@@ -1,0 +1,689 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_theme.dart';
+
+class ViewerDashboardScreen extends StatefulWidget {
+  const ViewerDashboardScreen({super.key});
+
+  @override
+  State<ViewerDashboardScreen> createState() => _ViewerDashboardScreenState();
+}
+
+class _ViewerDashboardScreenState extends State<ViewerDashboardScreen>
+    with SingleTickerProviderStateMixin {
+  int _selectedTab = 0;
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+
+  final List<_DeviceData> _devices = [
+    _DeviceData(
+      id: 'front_door',
+      name: 'Front Door',
+      isOnline: true,
+      battery: 87,
+      events: 3,
+    ),
+    _DeviceData(
+      id: 'living_room',
+      name: 'Living Room',
+      isOnline: true,
+      battery: 62,
+      events: 7,
+    ),
+    _DeviceData(
+      id: 'garage',
+      name: 'Garage',
+      isOnline: false,
+      battery: 15,
+      events: 0,
+    ),
+  ];
+
+  final List<_EventData> _events = [
+    _EventData(
+      camera: 'Front Door',
+      time: '2 min ago',
+      duration: '12s',
+      severity: EventSeverity.alert,
+    ),
+    _EventData(
+      camera: 'Living Room',
+      time: '18 min ago',
+      duration: '8s',
+      severity: EventSeverity.motion,
+    ),
+    _EventData(
+      camera: 'Living Room',
+      time: '1 hr ago',
+      duration: '24s',
+      severity: EventSeverity.motion,
+    ),
+    _EventData(
+      camera: 'Front Door',
+      time: '3 hrs ago',
+      duration: '5s',
+      severity: EventSeverity.motion,
+    ),
+    _EventData(
+      camera: 'Garage',
+      time: '5 hrs ago',
+      duration: '15s',
+      severity: EventSeverity.alert,
+    ),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeOut,
+    );
+    _fadeController.forward();
+  }
+
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.bgPrimary,
+      body: FadeTransition(
+        opacity: _fadeAnimation,
+        child: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: _selectedTab == 0
+                    ? _buildDashboard()
+                    : _buildEventsTab(),
+              ),
+            ],
+          ),
+        ),
+      ),
+      bottomNavigationBar: _buildBottomNav(),
+      floatingActionButton: _selectedTab == 0
+          ? FloatingActionButton.extended(
+              onPressed: () {
+                HapticFeedback.mediumImpact();
+                context.goNamed(
+                  'live-stream',
+                  pathParameters: {'deviceId': 'front_door'},
+                );
+              },
+              backgroundColor: AppColors.accent,
+              icon: const Icon(
+                Icons.play_circle_outline_rounded,
+                color: Colors.white,
+              ),
+              label: Text(
+                'View Live',
+                style: AppTheme.dark.textTheme.labelLarge?.copyWith(
+                  color: Colors.white,
+                ),
+              ),
+            )
+          : null,
+    );
+  }
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      child: Row(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('SentryLens', style: AppTheme.dark.textTheme.headlineMedium),
+              Text(
+                '${_devices.where((d) => d.isOnline).length} of ${_devices.length} cameras online',
+                style: AppTheme.dark.textTheme.bodySmall,
+              ),
+            ],
+          ),
+          const Spacer(),
+          // Notification bell
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(
+                  Icons.notifications_outlined,
+                  color: AppColors.textPrimary,
+                  size: 26,
+                ),
+                onPressed: () {},
+              ),
+              Positioned(
+                top: 10,
+                right: 10,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: AppColors.accent,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          IconButton(
+            icon: const Icon(
+              Icons.person_outline_rounded,
+              color: AppColors.textPrimary,
+              size: 26,
+            ),
+            onPressed: () => context.pushNamed('profile'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDashboard() {
+    return ListView(
+      padding: const EdgeInsets.only(top: 20, bottom: 100),
+      children: [
+        // Status summary cards
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            children: [
+              _StatCard(
+                label: 'Online',
+                value: '${_devices.where((d) => d.isOnline).length}',
+                color: AppColors.success,
+                icon: Icons.videocam_rounded,
+              ),
+              const SizedBox(width: 12),
+              _StatCard(
+                label: 'Events Today',
+                value: '${_events.length}',
+                color: AppColors.accent,
+                icon: Icons.motion_photos_on_rounded,
+              ),
+              const SizedBox(width: 12),
+              _StatCard(
+                label: 'Alerts',
+                value:
+                    '${_events.where((e) => e.severity == EventSeverity.alert).length}',
+                color: AppColors.warning,
+                icon: Icons.warning_amber_rounded,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 28),
+        // My Cameras
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            children: [
+              Text('My Cameras', style: AppTheme.dark.textTheme.titleMedium),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => context.goNamed('devices'),
+                child: Text(
+                  'Manage',
+                  style: AppTheme.dark.textTheme.bodySmall?.copyWith(
+                    color: AppColors.accent,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 160,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: _devices.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (_, i) => _DeviceCard(device: _devices[i]),
+          ),
+        ),
+        const SizedBox(height: 28),
+        // Recent Events
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            children: [
+              Text('Recent Events', style: AppTheme.dark.textTheme.titleMedium),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => setState(() => _selectedTab = 1),
+                child: Text(
+                  'See all',
+                  style: AppTheme.dark.textTheme.bodySmall?.copyWith(
+                    color: AppColors.accent,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...(_events.take(3).map((e) => _EventTile(event: e))),
+      ],
+    );
+  }
+
+  Widget _buildEventsTab() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+      children: [
+        // Filter chips
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: ['All', 'Motion', 'Alert', 'Today', 'This Week']
+                .map((f) => _FilterChip(label: f, isSelected: f == 'All'))
+                .toList(),
+          ),
+        ),
+        const SizedBox(height: 20),
+        ..._events.map((e) => _EventTile(event: e)),
+      ],
+    );
+  }
+
+  Widget _buildBottomNav() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.bgSurface,
+        border: const Border(
+          top: BorderSide(color: AppColors.border, width: 1),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _NavItem(
+                icon: Icons.dashboard_rounded,
+                label: 'Dashboard',
+                isSelected: _selectedTab == 0,
+                onTap: () => setState(() => _selectedTab = 0),
+              ),
+              _NavItem(
+                icon: Icons.history_rounded,
+                label: 'Events',
+                isSelected: _selectedTab == 1,
+                onTap: () => setState(() => _selectedTab = 1),
+              ),
+              _NavItem(
+                icon: Icons.videocam_outlined,
+                label: 'Devices',
+                isSelected: false,
+                onTap: () => context.goNamed('devices'),
+              ),
+              _NavItem(
+                icon: Icons.settings_outlined,
+                label: 'Settings',
+                isSelected: false,
+                onTap: () => context.pushNamed('settings'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _NavItem({
+    required this.icon,
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.accent.withValues(alpha: 0.1)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: isSelected ? AppColors.accent : AppColors.textHint,
+              size: 22,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? AppColors.accent : AppColors.textHint,
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final String label, value;
+  final Color color;
+  final IconData icon;
+  const _StatCard({
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: TextStyle(
+                color: color,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Text(label, style: AppTheme.dark.textTheme.bodySmall),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DeviceCard extends StatelessWidget {
+  final _DeviceData device;
+  const _DeviceCard({required this.device});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => context.goNamed(
+        'live-stream',
+        pathParameters: {'deviceId': device.id},
+      ),
+      child: Container(
+        width: 180,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.bgSurface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: device.isOnline
+                ? AppColors.success.withValues(alpha: 0.3)
+                : AppColors.border,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: device.isOnline
+                        ? AppColors.success
+                        : AppColors.textHint,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  device.isOnline ? 'Online' : 'Offline',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: device.isOnline
+                        ? AppColors.success
+                        : AppColors.textHint,
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+            // Camera preview placeholder
+            Container(
+              height: 60,
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.videocam_rounded,
+                  color: device.isOnline
+                      ? AppColors.accent.withValues(alpha: 0.6)
+                      : AppColors.textHint.withValues(alpha: 0.3),
+                  size: 24,
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              device.name,
+              style: AppTheme.dark.textTheme.titleMedium?.copyWith(
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(
+                  Icons.battery_full_rounded,
+                  size: 12,
+                  color: AppColors.textMuted,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${device.battery}%',
+                  style: AppTheme.dark.textTheme.bodySmall,
+                ),
+                const Spacer(),
+                if (device.events > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.accent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '${device.events}',
+                      style: const TextStyle(
+                        color: AppColors.accent,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EventTile extends StatelessWidget {
+  final _EventData event;
+  const _EventTile({required this.event});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = event.severity == EventSeverity.alert
+        ? AppColors.accent
+        : AppColors.warning;
+    final icon = event.severity == EventSeverity.alert
+        ? Icons.warning_amber_rounded
+        : Icons.motion_photos_on_rounded;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.bgSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  event.severity == EventSeverity.alert
+                      ? 'Motion Alert'
+                      : 'Motion Detected',
+                  style: AppTheme.dark.textTheme.titleMedium?.copyWith(
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(event.camera, style: AppTheme.dark.textTheme.bodySmall),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(event.time, style: AppTheme.dark.textTheme.bodySmall),
+              const SizedBox(height: 4),
+              Text(
+                event.duration,
+                style: AppTheme.dark.textTheme.bodySmall?.copyWith(
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 8),
+          const Icon(
+            Icons.play_circle_outline_rounded,
+            color: AppColors.textHint,
+            size: 20,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  const _FilterChip({required this.label, required this.isSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      decoration: BoxDecoration(
+        color: isSelected ? AppColors.accent : AppColors.bgSurface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isSelected ? AppColors.accent : AppColors.border,
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: isSelected ? Colors.white : AppColors.textMuted,
+          fontSize: 12,
+          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+        ),
+      ),
+    );
+  }
+}
+
+enum EventSeverity { motion, alert }
+
+class _DeviceData {
+  final String id, name;
+  final bool isOnline;
+  final int battery, events;
+  _DeviceData({
+    required this.id,
+    required this.name,
+    required this.isOnline,
+    required this.battery,
+    required this.events,
+  });
+}
+
+class _EventData {
+  final String camera, time, duration;
+  final EventSeverity severity;
+  _EventData({
+    required this.camera,
+    required this.time,
+    required this.duration,
+    required this.severity,
+  });
+}
