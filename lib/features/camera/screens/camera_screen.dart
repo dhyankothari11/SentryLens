@@ -1,26 +1,31 @@
 import 'dart:async';
-import 'dart:math';
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/services/camera_service.dart';
+import '../../../core/services/webrtc_service.dart';
 
-class CameraScreen extends StatefulWidget {
+class CameraScreen extends ConsumerStatefulWidget {
   const CameraScreen({super.key});
 
   @override
-  State<CameraScreen> createState() => _CameraScreenState();
+  ConsumerState<CameraScreen> createState() => _CameraScreenState();
 }
 
-class _CameraScreenState extends State<CameraScreen>
+class _CameraScreenState extends ConsumerState<CameraScreen>
     with TickerProviderStateMixin {
   bool _isRecording = false;
   bool _isMotionDetected = false;
   bool _isAudioEnabled = true;
   bool _isNightMode = false;
   double _sensitivity = 0.5;
-  String _status = 'STANDBY';
+  String _status = 'INITIALIZING';
+  String? _roomId;
+  WebRTCService? _webrtcService;
   Timer? _motionTimer;
   Timer? _simulationTimer;
 
@@ -61,10 +66,39 @@ class _CameraScreenState extends State<CameraScreen>
     );
     _fadeController.forward();
 
+    _initCamera();
+
     // Simulate motion detection every 8 seconds for demo
     _simulationTimer = Timer.periodic(const Duration(seconds: 8), (_) {
       if (mounted && _status != 'STANDBY') _triggerMotion();
     });
+  }
+
+  Future<void> _initCamera() async {
+    try {
+      // 1. Initialize local preview
+      await ref.read(cameraServiceProvider).initialize();
+      if (mounted) setState(() {});
+
+      // 2. Initialize WebRTC and publish the room
+      _webrtcService = ref.read(webRTCServiceProvider);
+      await _webrtcService!.initLocalStream();
+      debugPrint("Starting WebRTC room creation...");
+      final roomId = await _webrtcService!.createRoom();
+
+      if (mounted) {
+        setState(() {
+          _roomId = roomId;
+          _status = 'STANDBY';
+        });
+      }
+    } catch (e, st) {
+      debugPrint("Camera or WebRTC initialization failed: $e");
+      debugPrintStack(stackTrace: st);
+      if (mounted) {
+        setState(() => _status = 'ERROR');
+      }
+    }
   }
 
   void _triggerMotion() {
@@ -100,6 +134,9 @@ class _CameraScreenState extends State<CameraScreen>
 
   @override
   void dispose() {
+    // Notify the WebRTC service to close connections and delete the room marker
+    _webrtcService?.hangUp();
+
     _pulseController.dispose();
     _borderController.dispose();
     _fadeController.dispose();
@@ -116,8 +153,30 @@ class _CameraScreenState extends State<CameraScreen>
         opacity: _fadeAnimation,
         child: Stack(
           children: [
-            // Simulated camera feed
-            _CameraPreviewSimulator(isNightMode: _isNightMode),
+            // Real camera feed if initialized, else black loading screen
+            Positioned.fill(
+              child: Builder(
+                builder: (context) {
+                  final cameraService = ref.watch(cameraServiceProvider);
+                  if (cameraService.isInitialized &&
+                      cameraService.controller != null) {
+                    return CameraPreview(cameraService.controller!);
+                  }
+                  return Container(
+                    color: Colors.black,
+                    child: const Center(
+                      child: CircularProgressIndicator(color: AppColors.accent),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            // Night mode overlay (simulated green tint)
+            if (_isNightMode)
+              Positioned.fill(
+                child: Container(color: Colors.green.withValues(alpha: 0.15)),
+              ),
 
             // Motion detection border flash
             AnimatedBuilder(
@@ -192,7 +251,9 @@ class _CameraScreenState extends State<CameraScreen>
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Camera Device',
+                    _roomId != null
+                        ? 'Camera-${_roomId!.substring(0, 8)}'
+                        : 'Camera Device',
                     style: AppTheme.dark.textTheme.bodySmall?.copyWith(
                       color: Colors.white,
                     ),
@@ -435,148 +496,4 @@ class _ControlButton extends StatelessWidget {
       ),
     );
   }
-}
-
-class _CameraPreviewSimulator extends StatefulWidget {
-  final bool isNightMode;
-  const _CameraPreviewSimulator({required this.isNightMode});
-
-  @override
-  State<_CameraPreviewSimulator> createState() =>
-      _CameraPreviewSimulatorState();
-}
-
-class _CameraPreviewSimulatorState extends State<_CameraPreviewSimulator>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _scanController;
-  late Animation<double> _scanAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _scanController = AnimationController(
-      duration: const Duration(seconds: 4),
-      vsync: this,
-    )..repeat();
-    _scanAnimation = CurvedAnimation(
-      parent: _scanController,
-      curve: Curves.linear,
-    );
-  }
-
-  @override
-  void dispose() {
-    _scanController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bgColor = widget.isNightMode
-        ? const Color(0xFF0A1628)
-        : const Color(0xFF111827);
-    return Container(
-      color: bgColor,
-      child: AnimatedBuilder(
-        animation: _scanAnimation,
-        builder: (_, __) => CustomPaint(
-          painter: _CameraFeedPainter(_scanAnimation.value, widget.isNightMode),
-          size: Size.infinite,
-        ),
-      ),
-    );
-  }
-}
-
-class _CameraFeedPainter extends CustomPainter {
-  final double progress;
-  final bool isNightMode;
-  final Random _rng = Random(42);
-
-  _CameraFeedPainter(this.progress, this.isNightMode);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Draw scan line
-    final scanY = progress * size.height;
-    final scanPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Colors.transparent,
-          (isNightMode ? AppColors.success : AppColors.accent).withValues(
-            alpha: 0.3,
-          ),
-          Colors.transparent,
-        ],
-      ).createShader(Rect.fromLTWH(0, scanY - 40, size.width, 80));
-    canvas.drawRect(Rect.fromLTWH(0, scanY - 40, size.width, 80), scanPaint);
-
-    // Draw corner brackets (camera frame)
-    final bracketPaint = Paint()
-      ..color = (isNightMode ? AppColors.success : Colors.white).withValues(
-        alpha: 0.3,
-      )
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-
-    const bSize = 24.0;
-    const margin = 40.0;
-    // Top-left
-    canvas.drawPath(
-      Path()
-        ..moveTo(margin, margin + bSize)
-        ..lineTo(margin, margin)
-        ..lineTo(margin + bSize, margin),
-      bracketPaint,
-    );
-    // Top-right
-    canvas.drawPath(
-      Path()
-        ..moveTo(size.width - margin - bSize, margin)
-        ..lineTo(size.width - margin, margin)
-        ..lineTo(size.width - margin, margin + bSize),
-      bracketPaint,
-    );
-    // Bottom-left
-    canvas.drawPath(
-      Path()
-        ..moveTo(margin, size.height - margin - bSize)
-        ..lineTo(margin, size.height - margin)
-        ..lineTo(margin + bSize, size.height - margin),
-      bracketPaint,
-    );
-    // Bottom-right
-    canvas.drawPath(
-      Path()
-        ..moveTo(size.width - margin - bSize, size.height - margin)
-        ..lineTo(size.width - margin, size.height - margin)
-        ..lineTo(size.width - margin, size.height - margin - bSize),
-      bracketPaint,
-    );
-
-    // Noise grain effect
-    final grainPaint = Paint()..style = PaintingStyle.fill;
-    for (int i = 0; i < 120; i++) {
-      final x = _rng.nextDouble() * size.width;
-      final y = (_rng.nextDouble() + progress) % 1.0 * size.height;
-      grainPaint.color = Colors.white.withValues(
-        alpha: _rng.nextDouble() * 0.03,
-      );
-      canvas.drawCircle(Offset(x, y), 1, grainPaint);
-    }
-
-    // Night mode green tint
-    if (isNightMode) {
-      canvas.drawRect(
-        Rect.fromLTWH(0, 0, size.width, size.height),
-        Paint()..color = AppColors.success.withValues(alpha: 0.05),
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_CameraFeedPainter old) =>
-      old.progress != progress || old.isNightMode != isNightMode;
 }

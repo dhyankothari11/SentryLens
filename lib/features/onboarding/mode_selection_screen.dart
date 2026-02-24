@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/services/auth_service.dart';
 
-class ModeSelectionScreen extends StatefulWidget {
+class ModeSelectionScreen extends ConsumerStatefulWidget {
   const ModeSelectionScreen({super.key});
 
   @override
-  State<ModeSelectionScreen> createState() => _ModeSelectionScreenState();
+  ConsumerState<ModeSelectionScreen> createState() =>
+      _ModeSelectionScreenState();
 }
 
-class _ModeSelectionScreenState extends State<ModeSelectionScreen>
+class _ModeSelectionScreenState extends ConsumerState<ModeSelectionScreen>
     with TickerProviderStateMixin {
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
@@ -99,9 +103,33 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen>
                     'Cloud recording',
                   ],
                   color: AppColors.accent,
-                  onTap: () {
+                  onTap: () async {
                     HapticFeedback.mediumImpact();
-                    context.goNamed('camera');
+
+                    // Request permissions on the spot before entering Camera view
+                    final statuses = await [
+                      Permission.camera,
+                      Permission.microphone,
+                    ].request();
+
+                    final allGranted = statuses.values.every(
+                      (s) => s.isGranted,
+                    );
+
+                    if (allGranted) {
+                      if (mounted) context.goNamed('camera');
+                    } else {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              "Camera and Microphone permissions are required to use this mode.",
+                            ),
+                            backgroundColor: AppColors.accent,
+                          ),
+                        );
+                      }
+                    }
                   },
                 ),
                 const SizedBox(height: 16),
@@ -123,9 +151,16 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen>
                 ),
                 const Spacer(),
                 Center(
-                  child: Text(
-                    'Logged in as user@example.com',
-                    style: AppTheme.dark.textTheme.bodySmall,
+                  child: Consumer(
+                    builder: (context, ref, child) {
+                      final user = ref.watch(authStateProvider).valueOrNull;
+                      final identity =
+                          user?.displayName ?? user?.email ?? 'User';
+                      return Text(
+                        'Logged in as $identity',
+                        style: AppTheme.dark.textTheme.bodySmall,
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(height: 8),

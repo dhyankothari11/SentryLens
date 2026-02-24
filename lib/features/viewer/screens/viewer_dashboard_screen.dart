@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +7,21 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/auth_service.dart';
+
+// Provides a real-time stream of all active WebRTC rooms for this user
+final activeRoomsProvider =
+    StreamProvider.autoDispose<List<QueryDocumentSnapshot>>((ref) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return Stream.value([]);
+
+      return FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('rooms')
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .map((snapshot) => snapshot.docs);
+    });
 
 class ViewerDashboardScreen extends StatefulWidget {
   const ViewerDashboardScreen({super.key});
@@ -18,30 +35,6 @@ class _ViewerDashboardScreenState extends State<ViewerDashboardScreen>
   int _selectedTab = 0;
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
-
-  final List<_DeviceData> _devices = [
-    _DeviceData(
-      id: 'front_door',
-      name: 'Front Door',
-      isOnline: true,
-      battery: 87,
-      events: 3,
-    ),
-    _DeviceData(
-      id: 'living_room',
-      name: 'Living Room',
-      isOnline: true,
-      battery: 62,
-      events: 7,
-    ),
-    _DeviceData(
-      id: 'garage',
-      name: 'Garage',
-      isOnline: false,
-      battery: 15,
-      events: 0,
-    ),
-  ];
 
   final List<_EventData> _events = [
     _EventData(
@@ -145,6 +138,7 @@ class _ViewerDashboardScreenState extends State<ViewerDashboardScreen>
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -161,9 +155,19 @@ class _ViewerDashboardScreenState extends State<ViewerDashboardScreen>
                   );
                 },
               ),
-              Text(
-                '${_devices.where((d) => d.isOnline).length} of ${_devices.length} cameras online',
-                style: AppTheme.dark.textTheme.bodySmall,
+              Consumer(
+                builder: (context, ref, child) {
+                  final roomCount = ref
+                      .watch(activeRoomsProvider)
+                      .maybeWhen(
+                        data: (rooms) => rooms.length,
+                        orElse: () => 0,
+                      );
+                  return Text(
+                    '$roomCount cameras online',
+                    style: AppTheme.dark.textTheme.bodySmall,
+                  );
+                },
               ),
             ],
           ),
@@ -215,11 +219,21 @@ class _ViewerDashboardScreenState extends State<ViewerDashboardScreen>
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Row(
             children: [
-              _StatCard(
-                label: 'Online',
-                value: '${_devices.where((d) => d.isOnline).length}',
-                color: AppColors.success,
-                icon: Icons.videocam_rounded,
+              Consumer(
+                builder: (context, ref, child) {
+                  final count = ref
+                      .watch(activeRoomsProvider)
+                      .maybeWhen(
+                        data: (rooms) => rooms.length,
+                        orElse: () => 0,
+                      );
+                  return _StatCard(
+                    label: 'Online',
+                    value: '$count',
+                    color: AppColors.success,
+                    icon: Icons.videocam_rounded,
+                  );
+                },
               ),
               const SizedBox(width: 12),
               _StatCard(
@@ -262,12 +276,42 @@ class _ViewerDashboardScreenState extends State<ViewerDashboardScreen>
         const SizedBox(height: 12),
         SizedBox(
           height: 164, // Increased to prevent bottom overflow
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: _devices.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (_, i) => _DeviceCard(device: _devices[i]),
+          child: Consumer(
+            builder: (context, ref, child) {
+              final activeRoomsAsync = ref.watch(activeRoomsProvider);
+
+              return activeRoomsAsync.when(
+                loading: () => const Center(
+                  child: CircularProgressIndicator(color: AppColors.accent),
+                ),
+                error: (e, st) => Center(
+                  child: Text(
+                    'Error: $e',
+                    style: AppTheme.dark.textTheme.bodySmall,
+                  ),
+                ),
+                data: (rooms) {
+                  if (rooms.isEmpty) {
+                    return Center(
+                      child: Text(
+                        'No cameras currently online.\nGo to Set as Camera to add one.',
+                        textAlign: TextAlign.center,
+                        style: AppTheme.dark.textTheme.bodySmall?.copyWith(
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    );
+                  }
+                  return ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    itemCount: rooms.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                    itemBuilder: (_, i) => _DeviceCard(room: rooms[i]),
+                  );
+                },
+              );
+            },
           ),
         ),
         const SizedBox(height: 28),
@@ -455,27 +499,24 @@ class _StatCard extends StatelessWidget {
 }
 
 class _DeviceCard extends StatelessWidget {
-  final _DeviceData device;
-  const _DeviceCard({required this.device});
+  final QueryDocumentSnapshot room;
+  const _DeviceCard({required this.room});
 
   @override
   Widget build(BuildContext context) {
+    final roomId = room.id;
+    final shortId = roomId.substring(0, 8);
+
     return GestureDetector(
-      onTap: () => context.goNamed(
-        'live-stream',
-        pathParameters: {'deviceId': device.id},
-      ),
+      onTap: () =>
+          context.goNamed('live-stream', pathParameters: {'deviceId': roomId}),
       child: Container(
         width: 180,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppColors.bgSurface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: device.isOnline
-                ? AppColors.success.withValues(alpha: 0.3)
-                : AppColors.border,
-          ),
+          border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -485,22 +526,18 @@ class _DeviceCard extends StatelessWidget {
                 Container(
                   width: 8,
                   height: 8,
-                  decoration: BoxDecoration(
-                    color: device.isOnline
-                        ? AppColors.success
-                        : AppColors.textHint,
+                  decoration: const BoxDecoration(
+                    color: AppColors.success,
                     shape: BoxShape.circle,
                   ),
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  device.isOnline ? 'Online' : 'Offline',
+                const Text(
+                  'Online',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: device.isOnline
-                        ? AppColors.success
-                        : AppColors.textHint,
+                    color: AppColors.success,
                   ),
                 ),
               ],
@@ -516,16 +553,14 @@ class _DeviceCard extends StatelessWidget {
               child: Center(
                 child: Icon(
                   Icons.videocam_rounded,
-                  color: device.isOnline
-                      ? AppColors.accent.withValues(alpha: 0.6)
-                      : AppColors.textHint.withValues(alpha: 0.3),
+                  color: AppColors.accent.withValues(alpha: 0.6),
                   size: 24,
                 ),
               ),
             ),
             const SizedBox(height: 10),
             Text(
-              device.name,
+              'Camera-$shortId',
               style: AppTheme.dark.textTheme.titleMedium?.copyWith(
                 fontSize: 14,
               ),
@@ -539,30 +574,7 @@ class _DeviceCard extends StatelessWidget {
                   color: AppColors.textMuted,
                 ),
                 const SizedBox(width: 4),
-                Text(
-                  '${device.battery}%',
-                  style: AppTheme.dark.textTheme.bodySmall,
-                ),
-                const Spacer(),
-                if (device.events > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.accent.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      '${device.events}',
-                      style: const TextStyle(
-                        color: AppColors.accent,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+                Text('100%', style: AppTheme.dark.textTheme.bodySmall),
               ],
             ),
           ],
@@ -676,19 +688,6 @@ class _FilterChip extends StatelessWidget {
 }
 
 enum EventSeverity { motion, alert }
-
-class _DeviceData {
-  final String id, name;
-  final bool isOnline;
-  final int battery, events;
-  _DeviceData({
-    required this.id,
-    required this.name,
-    required this.isOnline,
-    required this.battery,
-    required this.events,
-  });
-}
 
 class _EventData {
   final String camera, time, duration;
