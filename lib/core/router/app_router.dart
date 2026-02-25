@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
+import '../../features/onboarding/intro_screen.dart';
 import '../../features/onboarding/mode_selection_screen.dart';
 import '../../features/camera/screens/camera_screen.dart';
 import '../../features/viewer/screens/viewer_dashboard_screen.dart';
@@ -13,15 +14,16 @@ import '../../features/settings/settings_screen.dart';
 import '../../features/profile/profile_screen.dart';
 import '../theme/app_colors.dart';
 import '../services/auth_service.dart';
+import '../providers/preferences_provider.dart';
 
-class SplashScreen extends StatefulWidget {
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
+class _SplashScreenState extends ConsumerState<SplashScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
@@ -48,8 +50,27 @@ class _SplashScreenState extends State<SplashScreen>
     );
     _controller.forward();
 
-    Future.delayed(const Duration(milliseconds: 2200), () {
-      if (mounted) context.goNamed('login');
+    Future.delayed(const Duration(milliseconds: 2200), () async {
+      try {
+        final prefs = ref.read(sharedPreferencesProvider);
+
+        bool hasSeenIntro = false;
+        try {
+          hasSeenIntro = await prefs.getBool(preferencesIntroKey) ?? false;
+        } catch (e) {
+          debugPrint('SharedPreferences read failed: $e');
+        }
+
+        if (mounted) {
+          if (hasSeenIntro) {
+            context.goNamed('login');
+          } else {
+            context.goNamed('intro');
+          }
+        }
+      } catch (e, st) {
+        debugPrint('SPLASH_CRASH: $e\n$st');
+      }
     });
   }
 
@@ -115,15 +136,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final isLoggedIn = authState.valueOrNull != null;
       final isSplash = state.matchedLocation == '/splash';
+      final isIntro = state.matchedLocation == '/intro';
       final isLoggingIn =
           state.matchedLocation == '/login' ||
           state.matchedLocation == '/register';
 
-      // Let the splash screen play out (it routes to /login on its own)
+      // Let the splash screen play out
       if (isSplash) return null;
+      // Allow unauthenticated users to view the intro
+      if (isIntro && !isLoggedIn) return null;
 
       if (!isLoggedIn && !isLoggingIn) return '/login';
       if (isLoggedIn && isLoggingIn) return '/mode-select';
+      if (isLoggedIn && isIntro) return '/mode-select';
 
       return null;
     },
@@ -132,6 +157,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/splash',
         name: 'splash',
         builder: (_, __) => const SplashScreen(),
+      ),
+      GoRoute(
+        path: '/intro',
+        name: 'intro',
+        builder: (_, __) => const IntroScreen(),
       ),
       GoRoute(
         path: '/login',

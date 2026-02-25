@@ -107,14 +107,11 @@ class _ModeSelectionScreenState extends ConsumerState<ModeSelectionScreen>
                     HapticFeedback.mediumImpact();
 
                     // Request permissions on the spot before entering Camera view
-                    final statuses = await [
-                      Permission.camera,
-                      Permission.microphone,
-                    ].request();
+                    final cameraStatus = await Permission.camera.request();
+                    final micStatus = await Permission.microphone.request();
 
-                    final allGranted = statuses.values.every(
-                      (s) => s.isGranted,
-                    );
+                    final allGranted =
+                        cameraStatus.isGranted && micStatus.isGranted;
 
                     if (allGranted) {
                       if (mounted) context.goNamed('camera');
